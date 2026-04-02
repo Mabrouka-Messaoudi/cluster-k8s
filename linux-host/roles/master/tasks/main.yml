@@ -1,0 +1,83 @@
+---
+# ============================================================
+# Role: master — initialiser le Control Plane
+# ============================================================
+
+- name: "Vérifier si le cluster est déjà initialisé"
+  stat:
+    path: /etc/kubernetes/admin.conf
+  register: kubeadm_done
+
+- name: "Initialiser le cluster avec kubeadm"
+  shell: |
+    kubeadm init \
+      --apiserver-advertise-address={{ master_ip }} \
+      --pod-network-cidr={{ pod_network_cidr }} \
+      --service-cidr={{ service_cidr }} \
+      --node-name={{ inventory_hostname }} \
+      --ignore-preflight-errors=NumCPU,Mem
+  when: not kubeadm_done.stat.exists
+  register: kubeadm_output
+
+- name: "Créer .kube pour vagrant"
+  file:
+    path: /home/vagrant/.kube
+    state: directory
+    owner: vagrant
+    group: vagrant
+    mode: '0755'
+
+- name: "Copier admin.conf dans .kube/config"
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /home/vagrant/.kube/config
+    owner: vagrant
+    group: vagrant
+    mode: '0644'
+    remote_src: yes
+
+- name: "Installer Flannel CNI"
+  become: false
+  shell: |
+    kubectl apply -f \
+    https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+  when: cni_plugin == "flannel"
+
+- name: "Configurer Flannel pour utiliser l'interface LAN"
+  become: false
+  shell: |
+    kubectl patch daemonset kube-flannel-ds -n kube-flannel \
+      --type='json' \
+      -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--iface={{ lan_interface }}"}]'
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+  ignore_errors: yes
+  when: cni_plugin == "flannel"
+
+- name: "Attendre que le master soit Ready"
+  become: false
+  shell: kubectl wait node/{{ inventory_hostname }} --for=condition=Ready --timeout=120s
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+  retries: 5
+  delay: 15
+  register: node_ready
+  until: node_ready.rc == 0
+
+- name: "Générer la commande kubeadm join"
+  shell: kubeadm token create --print-join-command
+  register: join_command_raw
+
+- name: "Sauvegarder la commande join en local"
+  local_action:
+    module: copy
+    content: "{{ join_command_raw.stdout }}"
+    dest: /tmp/k8s2_join_command.sh
+    mode: '0600'
+  become: false
+
+- name: "Afficher la commande join"
+  debug:
+    msg: "{{ join_command_raw.stdout }}"

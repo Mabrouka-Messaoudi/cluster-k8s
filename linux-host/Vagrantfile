@@ -1,0 +1,65 @@
+# ============================================================
+# Vagrantfile — Linux Host (KVM / libvirt)
+# Nœuds : k8s2-worker2 (192.168.100.113) + k8s2-worker3 (192.168.100.114)
+# Ressources réduites : 1Go RAM / 1 CPU par worker
+# !! Ne touche PAS au cluster existant !!
+# ============================================================
+#
+# PRÉREQUIS sur l'hôte Linux (une seule fois) :
+#   sudo apt install vagrant-libvirt bridge-utils -y
+#   vagrant plugin install vagrant-libvirt
+#   + créer br0 (voir docs/GUIDE_BRIDGE.md)
+
+NODES = [
+  { name: "k8s2-worker2", ip: "192.168.100.113", memory: 1024, cpus: 1 },
+  { name: "k8s2-worker3", ip: "192.168.100.114", memory: 1024, cpus: 1 },
+]
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "generic/ubuntu2204"
+  config.vm.box_check_update = false
+
+  NODES.each do |node|
+    config.vm.define node[:name] do |vm|
+      vm.vm.hostname = node[:name]
+
+      # Interface bridge sur br0 (bridge physique Linux)
+      vm.vm.network "public_network",
+        ip: node[:ip],
+        dev: "br0",
+        mode: "bridge",
+        type: "bridge"
+
+      vm.vm.provider "libvirt" do |lv|
+        lv.driver            = "kvm"
+        lv.memory            = node[:memory]
+        lv.cpus              = node[:cpus]
+        lv.storage_pool_name = "default"
+        # Pas de graphics, console série uniquement (économise RAM)
+        lv.graphics_type     = "none"
+        lv.video_type        = "none"
+      end
+
+      vm.vm.provision "shell", inline: <<-SHELL
+        set -e
+        IFACE=$(ip -o link show | awk -F': ' '{print $2}' | grep -v lo | sed -n '2p')
+        echo "[VAGRANT] Interface LAN détectée : $IFACE"
+
+        cat > /etc/netplan/99-k8s-lan.yaml <<EOF
+network:
+  version: 2
+  ethernets:
+    ${IFACE}:
+      dhcp4: false
+      addresses:
+        - #{node[:ip]}/24
+EOF
+        chmod 600 /etc/netplan/99-k8s-lan.yaml
+        netplan apply
+        sleep 2
+        ip addr show $IFACE
+        echo "[VAGRANT] IP #{node[:ip]} configurée OK"
+      SHELL
+    end
+  end
+end

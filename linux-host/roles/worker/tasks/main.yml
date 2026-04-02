@@ -1,0 +1,27 @@
+---
+# ============================================================
+# Role: worker — joindre les workers au cluster 2
+# ============================================================
+
+- name: "Vérifier si le nœud est déjà dans le cluster"
+  stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: already_joined
+
+- name: "Lire la commande join"
+  local_action:
+    module: slurp
+    src: /tmp/k8s2_join_command.sh
+  register: join_cmd
+  become: false
+
+- name: "Joindre le cluster"
+  shell: >
+    {{ join_cmd.content | b64decode | trim }}
+    --node-name={{ inventory_hostname }}
+    --ignore-preflight-errors=NumCPU,Mem
+  when: not already_joined.stat.exists
+
+- name: "Confirmer le join"
+  debug:
+    msg: "{{ inventory_hostname }} a rejoint le cluster 2"

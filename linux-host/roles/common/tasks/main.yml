@@ -1,0 +1,163 @@
+---
+# ============================================================
+# Role: common — préparation système (tous les nœuds)
+# ============================================================
+
+# ---------- SWAP ----------
+- name: "Désactiver swap immédiatement"
+  shell: swapoff -a
+  changed_when: false
+
+- name: "Désactiver swap dans /etc/fstab (persistant)"
+  replace:
+    path: /etc/fstab
+    regexp: '^([^#].*\sswap\s.*)$'
+    replace: '#\1'
+
+# ---------- MODULES KERNEL ----------
+- name: "Charger overlay et br_netfilter"
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: "Persister les modules au boot"
+  copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: |
+      overlay
+      br_netfilter
+
+# ---------- SYSCTL ----------
+- name: "Paramètres réseau pour Kubernetes"
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop:
+    - { key: "net.bridge.bridge-nf-call-iptables",  value: "1" }
+    - { key: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
+    - { key: "net.ipv4.ip_forward",                  value: "1" }
+
+# ---------- NTP ----------
+- name: "Activer NTP (synchronisation temps)"
+  shell: timedatectl set-ntp true
+  changed_when: false
+
+# ---------- DÉPENDANCES ----------
+- name: "Installer les dépendances système"
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - socat
+      - conntrack
+      - ipset
+    state: present
+    update_cache: yes
+
+# ---------- CONTAINERD ----------
+- name: "Créer le répertoire keyrings"
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: "Ajouter la clé GPG Docker"
+  shell: |
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+      | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+  args:
+    creates: /etc/apt/keyrings/docker.gpg
+
+- name: "Ajouter le dépôt Docker"
+  shell: |
+    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] \
+    https://download.docker.com/linux/ubuntu \
+    $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
+  args:
+    creates: /etc/apt/sources.list.d/docker.list
+
+- name: "Installer containerd"
+  apt:
+    name: containerd.io
+    state: present
+    update_cache: yes
+
+- name: "Créer /etc/containerd"
+  file:
+    path: /etc/containerd
+    state: directory
+
+- name: "Générer la config containerd par défaut"
+  shell: containerd config default > /etc/containerd/config.toml
+  args:
+    creates: /etc/containerd/config.toml
+
+- name: "Activer SystemdCgroup dans containerd"
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: 'SystemdCgroup = false'
+    replace: 'SystemdCgroup = true'
+  notify: restart containerd
+
+- name: "Activer et démarrer containerd"
+  systemd:
+    name: containerd
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+# ---------- KUBERNETES ----------
+- name: "Ajouter la clé GPG Kubernetes"
+  shell: |
+    curl -fsSL \
+    https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb/Release.key \
+    | gpg --dearmor -o /etc/apt/keyrings/kubernetes.gpg
+    chmod a+r /etc/apt/keyrings/kubernetes.gpg
+  args:
+    creates: /etc/apt/keyrings/kubernetes.gpg
+
+- name: "Ajouter le dépôt Kubernetes"
+  shell: |
+    echo "deb [signed-by=/etc/apt/keyrings/kubernetes.gpg] \
+    https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb/ /" \
+    > /etc/apt/sources.list.d/kubernetes.list
+  args:
+    creates: /etc/apt/sources.list.d/kubernetes.list
+
+- name: "Installer kubelet, kubeadm, kubectl"
+  apt:
+    name:
+      - kubelet
+      - kubeadm
+      - kubectl
+    state: present
+    update_cache: yes
+
+- name: "Mettre les packages Kubernetes en hold"
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubelet
+    - kubeadm
+    - kubectl
+
+- name: "Forcer kubelet à utiliser l'IP LAN (évite NAT)"
+  copy:
+    dest: /etc/default/kubelet
+    content: "KUBELET_EXTRA_ARGS=--node-ip={{ ansible_host }}\n"
+  notify: restart kubelet
+
+- name: "Activer kubelet"
+  systemd:
+    name: kubelet
+    enabled: yes
+    daemon_reload: yes

@@ -1,0 +1,25 @@
+---
+# ============================================================
+# Variables — Cluster 2
+# CIDRs DIFFERENTS du cluster 1 pour éviter tout conflit
+# ============================================================
+
+# IP du master (API server LAN)
+master_ip: "192.168.100.111"
+
+# Réseau pods — DIFFERENT du cluster 1 (10.244.0.0/16)
+pod_network_cidr: "10.245.0.0/16"
+
+# Réseau services — DIFFERENT du cluster 1 (10.96.0.0/12)
+service_cidr: "10.97.0.0/12"
+
+# Version Kubernetes (branche stable)
+k8s_version: "1.29"
+
+# CNI
+cni_plugin: "flannel"
+
+# Nom de l'interface LAN dans les VMs
+# Vérifie avec : ip -o link show | awk -F': ' '{print $2}'
+# Souvent eth1 (VirtualBox) ou enp7s0 (KVM/libvirt)
+lan_interface: "eth1"

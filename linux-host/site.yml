@@ -1,0 +1,18 @@
+---
+- name: "Préparation système — tous les nœuds"
+  hosts: cluster2
+  become: yes
+  roles:
+    - common
+
+- name: "Initialisation Control Plane"
+  hosts: masters
+  become: yes
+  roles:
+    - master
+
+- name: "Join Workers"
+  hosts: workers
+  become: yes
+  roles:
+    - worker

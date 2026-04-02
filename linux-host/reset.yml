@@ -1,0 +1,35 @@
+---
+# Reset UNIQUEMENT le cluster 2 — cluster 1 non affecté
+- name: "Reset Cluster 2"
+  hosts: cluster2
+  become: yes
+  tasks:
+    - name: "kubeadm reset"
+      shell: kubeadm reset -f
+      ignore_errors: yes
+
+    - name: "Supprimer les fichiers Kubernetes"
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/kubernetes
+        - /home/vagrant/.kube
+        - /var/lib/etcd
+        - /var/lib/kubelet
+
+    - name: "Nettoyer iptables"
+      shell: |
+        iptables -F && iptables -t nat -F
+        iptables -t mangle -F && iptables -X
+      ignore_errors: yes
+
+    - name: "Redémarrer services"
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+      loop: [kubelet, containerd]
+      ignore_errors: yes
+
+    - debug:
+        msg: "Cluster 2 réinitialisé. Cluster 1 intact."
