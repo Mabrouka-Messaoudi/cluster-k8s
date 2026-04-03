@@ -1,8 +1,4 @@
 ---
-# ============================================================
-# Role: master — initialiser le Control Plane
-# ============================================================
-
 - name: "Vérifier si le cluster est déjà initialisé"
   stat:
     path: /etc/kubernetes/admin.conf
@@ -71,11 +67,11 @@
   register: join_command_raw
 
 - name: "Sauvegarder la commande join en local"
-  local_action:
-    module: copy
+  copy:
     content: "{{ join_command_raw.stdout }}"
     dest: /tmp/k8s2_join_command.sh
     mode: '0600'
+  delegate_to: localhost
   become: false
 
 - name: "Afficher la commande join"

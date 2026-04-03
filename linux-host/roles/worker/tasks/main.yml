@@ -1,18 +1,14 @@
 ---
-# ============================================================
-# Role: worker — joindre les workers au cluster 2
-# ============================================================
-
 - name: "Vérifier si le nœud est déjà dans le cluster"
   stat:
     path: /etc/kubernetes/kubelet.conf
   register: already_joined
 
 - name: "Lire la commande join"
-  local_action:
-    module: slurp
+  slurp:
     src: /tmp/k8s2_join_command.sh
   register: join_cmd
+  delegate_to: localhost
   become: false
 
 - name: "Joindre le cluster"
