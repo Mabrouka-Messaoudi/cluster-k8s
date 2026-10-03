@@ -21,7 +21,7 @@
     state: directory
     owner: vagrant
     group: vagrant
-    mode: '0755'
+    mode: '0700'
 
 - name: "Copier admin.conf dans .kube/config"
   copy:
@@ -29,7 +29,7 @@
     dest: /home/vagrant/.kube/config
     owner: vagrant
     group: vagrant
-    mode: '0644'
+    mode: '0600'
     remote_src: yes
 
 - name: "Installer Flannel CNI"
@@ -74,6 +74,7 @@
   delegate_to: localhost
   become: false
 
-- name: "Afficher la commande join"
+- name: "Confirmer la génération de la commande join"
   debug:
-    msg: "{{ join_command_raw.stdout }}"
+    msg: "Commande join générée (token masqué), enregistrée dans /tmp/k8s2_join_command.sh"
+

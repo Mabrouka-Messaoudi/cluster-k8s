@@ -19,7 +19,8 @@ k8s_version: "1.29"
 # CNI
 cni_plugin: "flannel"
 
-# Nom de l'interface LAN dans les VMs
+# Nom de l'interface LAN dans les VMs (valeur par défaut)
 # Vérifie avec : ip -o link show | awk -F': ' '{print $2}'
-# Souvent eth1 (VirtualBox) ou enp7s0 (KVM/libvirt)
+# Souvent eth1 ou enp0s8 (VirtualBox), enp7s0 (KVM/libvirt)
+# Surchargée par host_vars/ pour k8s2-master et k8s2-worker1 (enp0s8).
 lan_interface: "eth1"

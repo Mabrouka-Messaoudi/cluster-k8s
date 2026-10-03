@@ -1,0 +1,21 @@
+# Vagrant : état local des VMs, contient des clés SSH privées -> ne jamais versionner
+.vagrant/
+*.box
+
+# Clés et secrets
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+*_key
+kubeconfig*
+admin.conf
+k8s2_join_command.sh
+
+# Ansible
+*.retry
+
+# Divers
+*.log
+.DS_Store
+Thumbs.db

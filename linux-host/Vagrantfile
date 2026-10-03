@@ -8,7 +8,7 @@
 # PRÉREQUIS sur l'hôte Linux (une seule fois) :
 #   sudo apt install vagrant-libvirt bridge-utils -y
 #   vagrant plugin install vagrant-libvirt
-#   + créer br0 (voir docs/GUIDE_BRIDGE.md)
+#   + créer br0 (voir docs/GUIDE.md, étape 0)
 
 NODES = [
   { name: "k8s2-worker2", ip: "192.168.100.113", memory: 1024, cpus: 1 },

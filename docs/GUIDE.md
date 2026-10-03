@@ -1,8 +1,7 @@
-# ================================================================
-# GUIDE COMPLET — Cluster Kubernetes 2
-# Hybrid VirtualBox (Windows) + KVM (Linux) sur LAN 192.168.100.0/24
-# Ressources réduites — coexiste avec le cluster 1
-# ================================================================
+# Guide complet — Cluster Kubernetes 2
+
+Cluster hybride VirtualBox (Windows) + KVM (Linux) sur le LAN 192.168.100.0/24.
+Ressources réduites ; coexiste avec le cluster 1.
 
 ## Récapitulatif des IPs
 
@@ -293,9 +292,12 @@ done
 C'est critique pour Kubernetes. L'interface LAN peut s'appeler différemment.
 
 ```bash
-# Depuis le dossier linux-host/
-vagrant ssh k8s2-master -- "ip -o link show | awk -F': ' '{print \$2}'"
-vagrant ssh k8s2-worker2 -- "ip -o link show | awk -F': ' '{print \$2}'"
+# Workers KVM : depuis le dossier linux-host/
+vagrant ssh k8s2-worker2 -c "ip -o link show | awk -F': ' '{print \$2}'"
+vagrant ssh k8s2-worker3 -c "ip -o link show | awk -F': ' '{print \$2}'"
+
+# Master et worker1 (VirtualBox sur Windows) : en SSH avec la clé copiée à l'étape 4 bis
+ssh -i ~/.ssh/k8s2-master_key vagrant@192.168.100.111 "ip -o link show | awk -F': ' '{print \$2}'"
 ```
 
 - VirtualBox → souvent `eth1`
@@ -305,6 +307,27 @@ Si c'est différent de `eth1`, modifie `linux-host/group_vars/all.yml` :
 ```yaml
 lan_interface: "enp7s0"   # mets le nom réel ici
 ```
+
+`linux-host/host_vars/` surcharge cette valeur pour `k8s2-master` et `k8s2-worker1` (`enp0s8`).
+
+---
+
+## ÉTAPE 4 bis — Récupérer les clés SSH des VMs
+
+Vagrant génère une clé privée **par machine** (la clé « insecure » n'est plus utilisée).
+Ces clés ne sont jamais versionnées (`.vagrant/` est dans `.gitignore`).
+
+- **Workers KVM** (worker2, worker3) : l'inventaire utilise directement
+  `linux-host/.vagrant/machines/<nom>/libvirt/private_key`. Rien à faire.
+- **Master et worker1** (VirtualBox sur Windows) : copier leurs clés vers le PC Linux :
+
+```bash
+scp Administrateur@192.168.100.6:<dossier>/windows-host/.vagrant/machines/k8s2-master/virtualbox/private_key  ~/.ssh/k8s2-master_key
+scp Administrateur@192.168.100.6:<dossier>/windows-host/.vagrant/machines/k8s2-worker1/virtualbox/private_key ~/.ssh/k8s2-worker1_key
+chmod 600 ~/.ssh/k8s2-master_key ~/.ssh/k8s2-worker1_key
+```
+
+Remplacer `<dossier>` par le chemin du projet sur le PC Windows.
 
 ---
 
@@ -319,6 +342,9 @@ cd linux-host
 ansible cluster2 -i inventory.ini -m ping
 ```
 
+> Les workers KVM sont joints via leurs IP libvirt (192.168.121.x, attribuées en DHCP).
+> Après un `vagrant destroy`, vérifier ces IP avec `vagrant ssh-config` et mettre à jour `inventory.ini`.
+
 Réponse attendue pour chaque nœud :
 ```
 k8s2-master | SUCCESS => {"ping": "pong"}
@@ -326,7 +352,7 @@ k8s2-master | SUCCESS => {"ping": "pong"}
 
 Si un nœud échoue, teste manuellement :
 ```bash
-ssh -i ~/.vagrant.d/insecure_private_key \
+ssh -i ~/.ssh/k8s2-master_key \
     -o StrictHostKeyChecking=no \
     vagrant@192.168.100.111 "hostname"
 ```
@@ -352,7 +378,7 @@ ansible-playbook -i inventory.ini site.yml --start-at-task="Nom de la tâche"
 
 ```bash
 # Se connecter au master
-ssh -i ~/.vagrant.d/insecure_private_key vagrant@192.168.100.111
+ssh -i ~/.ssh/k8s2-master_key vagrant@192.168.100.111
 
 # Sur le master :
 kubectl get nodes -o wide
@@ -391,7 +417,7 @@ kubectl get nodes
 # Cluster 2
 export KUBECONFIG=/home/vagrant/.kube/config   # sur le master2
 # ou copier le fichier :
-scp -i ~/.vagrant.d/insecure_private_key \
+scp -i ~/.ssh/k8s2-master_key \
     vagrant@192.168.100.111:~/.kube/config \
     ~/.kube/config-cluster2
 
@@ -403,7 +429,7 @@ kubectl get nodes
 
 ```bash
 # Récupérer le kubeconfig cluster2
-scp -i ~/.vagrant.d/insecure_private_key \
+scp -i ~/.ssh/k8s2-master_key \
     vagrant@192.168.100.111:~/.kube/config \
     /tmp/config-cluster2
 
